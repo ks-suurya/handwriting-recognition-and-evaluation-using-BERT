@@ -1,24 +1,59 @@
+version: '3.8'
+
 services:
-  htr-flask-app:
+  # MySQL Database Service
+  db:
+    image: mysql:8.0
+    cap_add:
+      - SYS_NICE
+    restart: always
+    environment:
+      - MYSQL_DATABASE=htr_db
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_ROOT_PASSWORD=root_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - htr-network
+
+  # Redis Service for Celery
+  redis:
+    image: redis:7-alpine
+    networks:
+      - htr-network
+
+  # Flask Web Application Service
+  web:
     build: .
     ports:
       - "5000:5000"
-    environment:
-      - FLASK_DEBUG=false
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - SECRET_KEY=${SECRET_KEY}
     volumes:
-      - ./uploads:/app/uploads
-      - ./results:/app/results
-      - ./data:/app/data
-      - ./htr_pipeline:/app/htr_pipeline
-      - ./logs:/app/logs
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - htr-network
+    command: >
+      sh -c "flask db upgrade &&
+             gunicorn --bind 0.0.0.0:5000 run:app"
+
+  # Celery Worker Service
+  worker:
+    build: .
+    command: celery -A app.tasks.celery worker --loglevel=info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
     networks:
       - htr-network
 
@@ -27,6 +62,4 @@ networks:
     driver: bridge
 
 volumes:
-  uploads:
-  results:
-  logs:
+  mysql_data:
