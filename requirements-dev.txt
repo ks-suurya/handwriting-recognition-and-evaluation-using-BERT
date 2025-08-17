@@ -9,3 +9,4 @@ celery
 pymysql
 boto3
 transformers==4.39.3
+onnxruntime

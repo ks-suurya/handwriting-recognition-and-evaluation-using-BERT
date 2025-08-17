@@ -1,59 +1,33 @@
-version: '3.8'
+# Use official Python image
+FROM python:3.10-slim
 
-services:
-  # PostgreSQL Database Service
-  db:
-    image: postgres:15-alpine
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
-    environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=htr_db
-    networks:
-      - htr-network
+# Set environment variables to prevent Python from writing .pyc files
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
-  # Redis Service for Celery
-  redis:
-    image: redis:7-alpine
-    networks:
-      - htr-network
+# Set the working directory inside the container
+WORKDIR /app
 
-  # Flask Web Application Service
-  web:
-    build: .
-    ports:
-      - "5000:5000"
-    volumes:
-      - .:/app
-    env_file:
-      - .env
-    depends_on:
-      - db
-      - redis
-    networks:
-      - htr-network
-    command: >
-      sh -c "flask db upgrade &&
-             gunicorn --bind 0.0.0.0:5000 run:app"
+# Install system-level dependencies required by libraries like OpenCV
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
-  # Celery Worker Service
-  worker:
-    build: .
-    command: celery -A app.tasks.celery worker --loglevel=info
-    volumes:
-      - .:/app
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - db
-    networks:
-      - htr-network
+# Copy the requirements file first to leverage Docker's layer caching
+COPY requirements.txt .
 
-networks:
-  htr-network:
-    driver: bridge
+# Install PyTorch specifically for a CPU-only environment
+RUN pip install --no-cache-dir torch==2.2.0 --index-url https://download.pytorch.org/whl/cpu
 
-volumes:
-  postgres_data:
+# Install the rest of the Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of your application's code into the container
+COPY . .
+
+# Expose the port the app runs on
+EXPOSE 5000

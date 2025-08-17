@@ -1,7 +1,7 @@
 # Flask and Server
 Flask==2.3.3
 Flask-CORS==4.0.0
-gunicorn==2.1.2.0
+gunicorn==23.0.0
 python-dotenv==1.0.0
 Werkzeug==2.3.7
 
